@@ -1,3 +1,0 @@
-service=auth level=INFO message="user logged in"
-service=payments level=ERROR message="payment failed"
-service=orders level=INFO message="order created"
