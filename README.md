@@ -1,0 +1,1 @@
+LogFlow is a developer-focused log pipeline that ships structured logs from apps to a central Go backend and lets you filter them by service, level, route, and time through a simple web dashboard secured with Firebase Authentication
