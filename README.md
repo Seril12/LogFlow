@@ -6,6 +6,7 @@ LogFlow is a developer-focused log aggregation and analysis platform that ships 
 
 [![Go Version](https://img.shields.io/badge/Go-1.20+-00ADD8?style=flat&logo=go)](https://go.dev/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Status](https://img.shields.io/badge/status-WIP-yellow.svg)](https://github.com/serilevanjalines/LogFlow)
 
 ---
 
@@ -22,24 +23,6 @@ LogFlow is a developer-focused log aggregation and analysis platform that ships 
 - **Context-Aware Analysis** - AI understands log patterns and correlates errors across services
 
 ---
-
-## 🏗️ Architecture
-┌─────────────┐         ┌──────────────┐         ┌─────────────┐
-│   Agent     │         │   Server     │         │  Gemini 3   │
-│  (Parses)   │──POST──▶│  (Filters &  │──API───▶│    API      │
-│   app.log   │ /ingest │  Analyzes)   │  Call   │             │
-└─────────────┘         └──────────────┘         └─────────────┘
-                               │
-                               │ Stores
-                               ▼
-                        ┌──────────────┐
-                        │  In-Memory   │
-                        │    Storage   │
-                        └──────────────┘
-
-undefined
----
-
 ## 📦 Tech Stack
 
 - **Backend:** Go (net/http)
@@ -56,48 +39,29 @@ undefined
 - Google Gemini API key ([Get one here](https://aistudio.google.com/apikey))
 
 ### Installation
+
+# Clone repository
+git clone https://github.com/serilevanjalines/LogFlow.git
+cd LogFlow
+
+# Install dependencies
+go mod tidy
+
+# Create .env file
+echo "GEMINI_API_KEY=your_api_key_here" > .env
+
 Running
 Terminal 1 - Start Server:
+go run ./cmd/server/main.go
+# Server starts on http://localhost:8080
+
 Terminal 2 - Start Agent:
+go run ./cmd/agent/main.go
+# Agent reads app.log and ships to server
+
 Terminal 3 - Test AI Integration:
+go run test_gemini.go
 
-
-📡 API Reference
-
-## 📡 API Reference
-
-### POST `/ingest`
-Ingest structured log events.
-
-**Request:**
-```json
-{
-  "Service": "payments",
-  "Level": "ERROR",
-  "Message": "payment failed",
-  "Route": "/checkout"
-}
-Response: 200 OK
-
-GET /logs
-Query stored logs with filters.
-
-Query Parameters:
-
-service - Filter by service name
-
-level - Filter by level (INFO, ERROR, WARN)
-
-route - Filter by route
-
-from - Start time (RFC3339)
-
-to - End time (RFC3339)
-
-Example:curl "http://localhost:8080/logs?service=payments&level=ERROR"
-
-
-Example:
 🤖 How We Use Gemini 3
 LogFlow integrates Google Gemini 3 Flash as an intelligent reasoning layer:
 
@@ -113,7 +77,4 @@ Structured Responses - Returns JSON with answer, evidence, and log references
 
 The Gemini 3 Flash model provides low-latency responses ideal for real-time incident triage.
 
-📁 Project Structure
-<img width="640" height="576" alt="image" src="https://github.com/user-attachments/assets/f48cfa34-f259-4c04-9499-3de76587d6a5" />
 
-The project is still in WIP :) @Jan 15 2026
