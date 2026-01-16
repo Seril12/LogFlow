@@ -49,6 +49,16 @@ go mod tidy
 # Create .env file
 echo "GEMINI_API_KEY=your_api_key_here" > .env
 
+# 3. Start LogFlow
+docker compose up --build
+
+# Server will be available at http://localhost:8080
+
+Stop LogFlow
+
+# Press Ctrl+C in the running terminal, or:
+docker compose down
+
 Running
 Terminal 1 - Start Server:
 go run ./cmd/server/main.go
