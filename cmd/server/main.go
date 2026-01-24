@@ -58,9 +58,11 @@ func initDB() error {
 }
 
 func main() {
-	// Load environment variables
-	if err := godotenv.Load(); err != nil {
-		log.Println("Warning: .env file not found")
+	// Load environment variables from project root
+	if err := godotenv.Load("../../.env"); err != nil {
+		if err := godotenv.Load(".env"); err != nil {
+			log.Println("⚠️  .env file not found, using system environment variables")
+		}
 	}
 
 	// Initialize database
@@ -80,10 +82,12 @@ func main() {
 	// Register handlers
 	http.HandleFunc("/ingest", ingestHandler)
 	http.HandleFunc("/logs", logsHandler)
+	http.HandleFunc("/metrics", metricsHandler)
 	http.HandleFunc("/ai/query", aiQueryHandler)
 	http.HandleFunc("/ai/summary", aiSummaryHandler)
 	http.HandleFunc("/health", healthHandler)
-
+	// Start background monitoring
+	go monitorErrorRate()
 	log.Println("🚀 LogFlow server listening on :8080")
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
@@ -160,6 +164,102 @@ func ingestHandler(w http.ResponseWriter, r *http.Request) {
 		"status": "success",
 		"id":     evt.ID,
 	})
+}
+
+// GET /metrics - System metrics
+func metricsHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Get counts by level
+	query := `
+		SELECT 
+			level,
+			COUNT(*) as count
+		FROM logs
+		GROUP BY level
+	`
+
+	rows, err := db.Query(query)
+	if err != nil {
+		http.Error(w, "Error querying metrics", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	metrics := make(map[string]int)
+	for rows.Next() {
+		var level string
+		var count int
+		rows.Scan(&level, &count)
+		metrics[level] = count
+	}
+
+	// Get top services
+	serviceQuery := `
+		SELECT 
+			service,
+			COUNT(*) as count
+		FROM logs
+		GROUP BY service
+		ORDER BY count DESC
+		LIMIT 5
+	`
+
+	rows2, err := db.Query(serviceQuery)
+	if err != nil {
+		http.Error(w, "Error querying services", http.StatusInternalServerError)
+		return
+	}
+	defer rows2.Close()
+
+	topServices := make(map[string]int)
+	for rows2.Next() {
+		var service string
+		var count int
+		rows2.Scan(&service, &count)
+		topServices[service] = count
+	}
+
+	response := map[string]interface{}{
+		"log_counts":   metrics,
+		"top_services": topServices,
+		"timestamp":    time.Now().Format(time.RFC3339),
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+// Background job: Check error rate every minute
+func monitorErrorRate() {
+	ticker := time.NewTicker(1 * time.Minute)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		// Get error count in last 5 minutes
+		query := `
+			SELECT COUNT(*) as errors
+			FROM logs
+			WHERE level = 'ERROR'
+			AND timestamp > NOW() - INTERVAL '5 minutes'
+		`
+
+		var errorCount int
+		err := db.QueryRow(query).Scan(&errorCount)
+		if err != nil {
+			log.Printf("Error checking error rate: %v", err)
+			continue
+		}
+
+		// Alert if > 10 errors in 5 min
+		if errorCount > 10 {
+			log.Printf("🚨 ALERT: High error rate detected! %d errors in last 5 minutes", errorCount)
+			// Could send to Slack, email, etc.
+		}
+	}
 }
 
 // GET /logs - Query logs from database
