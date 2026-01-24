@@ -5,30 +5,22 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.server
-    container_name: logflow-server
     ports:
       - "8080:8080"
-    env_file:
-      - .env
-    networks:
-      - logflow-network
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - DATABASE_URL=${DATABASE_URL} # ✅ Make sure this line exists
+      - PORT=8080
     restart: unless-stopped
 
   agent:
     build:
       context: .
       dockerfile: Dockerfile.agent
-    container_name: logflow-agent
-    depends_on:
-      - server
-    volumes:
-      - ./app.log:/app/app.log:ro
     environment:
       - SERVER_URL=http://server:8080
-    networks:
-      - logflow-network
+    volumes:
+      - ./app.log:/app/app.log:ro
+    depends_on:
+      - server
     restart: unless-stopped
-
-networks:
-  logflow-network:
-    driver: bridge
