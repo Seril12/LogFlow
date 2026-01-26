@@ -22,7 +22,7 @@ Task: Differential Log Analysis between HEALTHY vs CRASH periods.
 
 Rules:
 1. Find EXACT divergence timestamp
-2. Correlate latency spikes across services  
+2. Correlate latency spikes across services
 3. Silent failure detection
 4. Confidence score (0-100%)
 5. 3-step remediation
@@ -54,26 +54,26 @@ func getLogsInTimeRange(startTime, endTime time.Time, limit int) []LogEvent {
         SELECT id, timestamp, service, level, route, message, metadata, created_at
         FROM logs WHERE timestamp BETWEEN $1 AND $2 ORDER BY timestamp DESC LIMIT $3
     `
-    
+
     rows, err := db.Query(query, startTime, endTime, limit)
     if err != nil {
         log.Printf("Query error: %v", err)
         return nil
     }
     defer rows.Close()
-    
+
     var logs []LogEvent
     for rows.Next() {
         var evt LogEvent
         var ts, createdAt time.Time
         var metadataJSON []byte
         var route sql.NullString
-        
+
         err := rows.Scan(&evt.ID, &ts, &evt.Service, &evt.Level, &route, &evt.Message, &metadataJSON, &createdAt)
         if err != nil {
             continue
         }
-        
+
         evt.Timestamp = ts.Format(time.RFC3339)
         if route.Valid {
             evt.Route = route.String
@@ -153,7 +153,7 @@ HEALTHY PERIOD (%s):
 %d logs
 %s
 
-CRASH PERIOD (%s):  
+CRASH PERIOD (%s):
 %d logs
 %s`, SRE_SYSTEM_PROMPT, healthy, len(healthyLogs), formatLogsForAI(healthyLogs), crash, len(crashLogs), formatLogsForAI(crashLogs))
 
@@ -296,7 +296,7 @@ func metricsHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Get counts by level
 	query := `
-		SELECT 
+		SELECT
 			level,
 			COUNT(*) as count
 		FROM logs
@@ -320,7 +320,7 @@ func metricsHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Get top services
 	serviceQuery := `
-		SELECT 
+		SELECT
 			service,
 			COUNT(*) as count
 		FROM logs
@@ -640,7 +640,7 @@ func aiSummaryHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Get statistics from database
 	statsQuery := `
-		SELECT 
+		SELECT
 			COUNT(*) as total,
 			COUNT(CASE WHEN level = 'ERROR' THEN 1 END) as errors,
 			COUNT(CASE WHEN level = 'WARN' OR level = 'WARNING' THEN 1 END) as warnings,
