@@ -7,12 +7,31 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq" // PostgreSQL driver
 	"github.com/serilevanjalines/LogFlow/internal/ai"
 )
+
+const SRE_SYSTEM_PROMPT = `
+You are LogFlow Sentinel, Senior SRE with 10+ years experience.
+
+Task: Differential Log Analysis between HEALTHY vs CRASH periods.
+
+Rules:
+1. Find EXACT divergence timestamp
+2. Correlate latency spikes across services  
+3. Silent failure detection
+4. Confidence score (0-100%)
+5. 3-step remediation
+
+Output Markdown:
+## Root Cause (Confidence: XX%)
+## Evidence
+## Remediation Steps
+`
 
 type LogEvent struct {
 	ID        int64                  `json:"id,omitempty"`
@@ -29,6 +48,48 @@ var (
 	db           *sql.DB
 	geminiClient *ai.Client
 )
+
+func getLogsInTimeRange(startTime, endTime time.Time, limit int) []LogEvent {
+    query := `
+        SELECT id, timestamp, service, level, route, message, metadata, created_at
+        FROM logs WHERE timestamp BETWEEN $1 AND $2 ORDER BY timestamp DESC LIMIT $3
+    `
+    
+    rows, err := db.Query(query, startTime, endTime, limit)
+    if err != nil {
+        log.Printf("Query error: %v", err)
+        return nil
+    }
+    defer rows.Close()
+    
+    var logs []LogEvent
+    for rows.Next() {
+        var evt LogEvent
+        var ts, createdAt time.Time
+        var metadataJSON []byte
+        var route sql.NullString
+        
+        err := rows.Scan(&evt.ID, &ts, &evt.Service, &evt.Level, &route, &evt.Message, &metadataJSON, &createdAt)
+        if err != nil {
+            continue
+        }
+        
+        evt.Timestamp = ts.Format(time.RFC3339)
+        if route.Valid {
+            evt.Route = route.String
+        }
+        logs = append(logs, evt)
+    }
+    return logs
+}
+
+func formatLogsForAI(logs []LogEvent) string {
+	var sb strings.Builder
+	for _, log := range logs {
+		sb.WriteString(fmt.Sprintf("[%s] %s %s: %s\n", log.Timestamp, log.Service, log.Level, log.Message))
+	}
+	return sb.String()
+}
 
 // Initialize database connection
 func initDB() error {
@@ -57,6 +118,65 @@ func initDB() error {
 	return nil
 }
 
+func timeCompareHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" {
+		http.Error(w, "GET only", 405)
+		return
+	}
+
+	healthy := r.URL.Query().Get("healthy")
+	crash := r.URL.Query().Get("crash")
+
+	if healthy == "" || crash == "" {
+		http.Error(w, "healthy & crash params required", 400)
+		return
+	}
+
+	// Use recent data from your logs (Jan 24)
+	healthyTime, _ := time.Parse(time.RFC3339, healthy)
+	crashTime, _ := time.Parse(time.RFC3339, crash)
+
+	duration := 7 * time.Minute // 7 minutes
+
+	healthyLogs := getLogsInTimeRange(healthyTime, healthyTime.Add(duration), 25)
+	crashLogs := getLogsInTimeRange(crashTime, crashTime.Add(duration), 25)
+
+	// Skip if no data
+	if len(healthyLogs) == 0 && len(crashLogs) == 0 {
+		http.Error(w, "No logs found in time ranges", 404)
+		return
+	}
+
+	prompt := fmt.Sprintf(`%s
+
+HEALTHY PERIOD (%s):
+%d logs
+%s
+
+CRASH PERIOD (%s):  
+%d logs
+%s`, SRE_SYSTEM_PROMPT, healthy, len(healthyLogs), formatLogsForAI(healthyLogs), crash, len(crashLogs), formatLogsForAI(crashLogs))
+
+	analysis, err := geminiClient.Query(prompt)
+	if err != nil {
+		log.Printf("Gemini error: %v", err)
+		http.Error(w, "AI analysis failed", 500)
+		return
+	}
+
+	// FIXED: Use interface{} map
+	response := map[string]interface{}{
+		"analysis":      analysis,
+		"healthy_count": len(healthyLogs),
+		"crash_count":   len(crashLogs),
+		"healthy_start": healthy,
+		"crash_start":   crash,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
 func main() {
 	// Load environment variables from project root
 	if err := godotenv.Load("../../.env"); err != nil {
@@ -81,6 +201,7 @@ func main() {
 
 	// Register handlers
 	http.HandleFunc("/ingest", ingestHandler)
+	http.HandleFunc("/ai/compare", timeCompareHandler)
 	http.HandleFunc("/logs", logsHandler)
 	http.HandleFunc("/metrics", metricsHandler)
 	http.HandleFunc("/ai/query", aiQueryHandler)
