@@ -1,4 +1,31 @@
+# Environment variables (NEVER commit API keys!)
 .env
+
+# Log files
 *.log
+app.log
+
+# Build artifacts
+UI/node_modules/
+UI/dist/
+UI/dist-ssr/
+
+# Temporary/personal files
+e.txt
 run.ps1
-app.logapp.log
+start-dev.bat
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Temporary documentation (if you want to keep these private)
+# IMPLEMENTATION_COMPLETE.txt
+# SETUP_COMPLETE.txt
+# setup.txt

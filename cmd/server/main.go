@@ -177,6 +177,21 @@ CRASH PERIOD (%s):
 	json.NewEncoder(w).Encode(response)
 }
 
+func corsMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		next(w, r)
+	}
+}
+
 func main() {
 	// Load environment variables from project root
 	if err := godotenv.Load("../../.env"); err != nil {
@@ -200,13 +215,13 @@ func main() {
 	log.Println("✅ Gemini AI client initialized")
 
 	// Register handlers
-	http.HandleFunc("/ingest", ingestHandler)
-	http.HandleFunc("/ai/compare", timeCompareHandler)
-	http.HandleFunc("/logs", logsHandler)
-	http.HandleFunc("/metrics", metricsHandler)
-	http.HandleFunc("/ai/query", aiQueryHandler)
-	http.HandleFunc("/ai/summary", aiSummaryHandler)
-	http.HandleFunc("/health", healthHandler)
+	http.HandleFunc("/ingest", corsMiddleware(ingestHandler))
+	http.HandleFunc("/ai/compare", corsMiddleware(timeCompareHandler))
+	http.HandleFunc("/logs", corsMiddleware(logsHandler))
+	http.HandleFunc("/metrics", corsMiddleware(metricsHandler))
+	http.HandleFunc("/ai/query", corsMiddleware(aiQueryHandler))
+	http.HandleFunc("/ai/summary", corsMiddleware(aiSummaryHandler))
+	http.HandleFunc("/health", corsMiddleware(healthHandler))
 	// Start background monitoring
 	go monitorErrorRate()
 	log.Println("🚀 LogFlow server listening on :8080")
