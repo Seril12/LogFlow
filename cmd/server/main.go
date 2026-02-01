@@ -50,14 +50,18 @@ var (
 )
 
 func getLogsInTimeRange(startTime, endTime time.Time, limit int) []LogEvent {
+	// 🔍 DEBUG: Log the query range with full timestamp info
+	log.Printf("🔍 DB QUERY: %s → %s (UTC)", startTime.Format(time.RFC3339), endTime.Format(time.RFC3339))
+	log.Printf("   Start: %v | End: %v", startTime.Unix(), endTime.Unix())
+
 	query := `
-        SELECT id, timestamp, service, level, route, message, metadata, created_at
+        SELECT id, service, level, route, message, metadata, timestamp, created_at
         FROM logs WHERE timestamp BETWEEN $1 AND $2 ORDER BY timestamp DESC LIMIT $3
     `
 
 	rows, err := db.Query(query, startTime, endTime, limit)
 	if err != nil {
-		log.Printf("Query error: %v", err)
+		log.Printf("❌ Query error: %v", err)
 		return nil
 	}
 	defer rows.Close()
@@ -65,12 +69,14 @@ func getLogsInTimeRange(startTime, endTime time.Time, limit int) []LogEvent {
 	var logs []LogEvent
 	for rows.Next() {
 		var evt LogEvent
-		var ts, createdAt time.Time
 		var metadataJSON []byte
 		var route sql.NullString
+		var ts, createdAt time.Time // ✅ DECLARE ALL FIRST
 
-		err := rows.Scan(&evt.ID, &ts, &evt.Service, &evt.Level, &route, &evt.Message, &metadataJSON, &createdAt)
+		// ✅ FIXED ORDER: id, service, level, route, message, metadata, timestamp, created_at
+		err := rows.Scan(&evt.ID, &evt.Service, &evt.Level, &route, &evt.Message, &metadataJSON, &ts, &createdAt)
 		if err != nil {
+			log.Printf("❌ Scan error: %v", err)
 			continue
 		}
 
@@ -78,8 +84,16 @@ func getLogsInTimeRange(startTime, endTime time.Time, limit int) []LogEvent {
 		if route.Valid {
 			evt.Route = route.String
 		}
+		if len(metadataJSON) > 0 {
+			json.Unmarshal(metadataJSON, &evt.Metadata)
+		}
+		evt.CreatedAt = createdAt.Format(time.RFC3339)
 		logs = append(logs, evt)
 	}
+
+	// 📊 DEBUG: Report how many logs were found
+	log.Printf("📊 TOTAL LOGS in range [%s, %s]: %d", startTime.Format("15:04:05"), endTime.Format("15:04:05"), len(logs))
+
 	return logs
 }
 
@@ -132,49 +146,102 @@ func timeCompareHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Use recent data from your logs (Jan 24)
-	healthyTime, _ := time.Parse(time.RFC3339, healthy)
-	crashTime, _ := time.Parse(time.RFC3339, crash)
+	// 🔧 FLEXIBLE PARSING: datetime-local OR RFC3339
+	healthyTime, err := parseFlexibleTime(healthy)
+	if err != nil {
+		log.Printf("❌ Invalid healthy time '%s': %v", healthy, err)
+		http.Error(w, fmt.Sprintf("Invalid healthy time: %s", healthy), 400)
+		return
+	}
 
-	duration := 7 * time.Minute // 7 minutes
+	crashTime, err := parseFlexibleTime(crash)
+	if err != nil {
+		log.Printf("❌ Invalid crash time '%s': %v", crash, err)
+		http.Error(w, fmt.Sprintf("Invalid crash time: %s", crash), 400)
+		return
+	}
 
-	healthyLogs := getLogsInTimeRange(healthyTime, healthyTime.Add(duration), 25)
-	crashLogs := getLogsInTimeRange(crashTime, crashTime.Add(duration), 25)
+	// 🕒 DEBUG: Log exact times being queried
+	log.Printf("📊 Time-Travel Request:")
+	log.Printf("   🟢 Healthy: %s (parsed: %v)", healthy, healthyTime.Format(time.RFC3339))
+	log.Printf("   🔴 Crash:   %s (parsed: %v)", crash, crashTime.Format(time.RFC3339))
+
+	duration := 7 * time.Minute // 7 minutes window
+
+	healthyStart := healthyTime
+	healthyEnd := healthyTime.Add(duration)
+	crashStart := crashTime
+	crashEnd := crashTime.Add(duration)
+
+	log.Printf("🔍 Query ranges:")
+	log.Printf("   🟢 Healthy window: %s → %s", healthyStart.Format(time.RFC3339), healthyEnd.Format(time.RFC3339))
+	log.Printf("   🔴 Crash window:   %s → %s", crashStart.Format(time.RFC3339), crashEnd.Format(time.RFC3339))
+
+	healthyLogs := getLogsInTimeRange(healthyStart, healthyEnd, 25)
+	crashLogs := getLogsInTimeRange(crashStart, crashEnd, 25)
+
+	log.Printf("✅ Query complete: healthy=%d logs, crash=%d logs", len(healthyLogs), len(crashLogs))
 
 	// Skip if no data
 	if len(healthyLogs) == 0 && len(crashLogs) == 0 {
+		log.Printf("🚨 ERROR: No logs found in time ranges!")
 		http.Error(w, "No logs found in time ranges", 404)
 		return
 	}
 
 	prompt := fmt.Sprintf(`%s
 
-HEALTHY PERIOD (%s):
+HEALTHY PERIOD (%s → %s):
 %d logs
 %s
 
-CRASH PERIOD (%s):
+CRASH PERIOD (%s → %s):
 %d logs
-%s`, SRE_SYSTEM_PROMPT, healthy, len(healthyLogs), formatLogsForAI(healthyLogs), crash, len(crashLogs), formatLogsForAI(crashLogs))
+%s`, SRE_SYSTEM_PROMPT,
+		healthyStart.Format("2006-01-02 15:04:05"), healthyEnd.Format("15:04:05"),
+		len(healthyLogs), formatLogsForAI(healthyLogs),
+		crashStart.Format("2006-01-02 15:04:05"), crashEnd.Format("15:04:05"),
+		len(crashLogs), formatLogsForAI(crashLogs))
 
 	analysis, err := geminiClient.Query(prompt)
 	if err != nil {
-		log.Printf("Gemini error: %v", err)
+		log.Printf("❌ Gemini error: %v", err)
 		http.Error(w, "AI analysis failed", 500)
 		return
 	}
 
-	// FIXED: Use interface{} map
 	response := map[string]interface{}{
 		"analysis":      analysis,
 		"healthy_count": len(healthyLogs),
 		"crash_count":   len(crashLogs),
-		"healthy_start": healthy,
-		"crash_start":   crash,
+		"healthy_start": healthyStart.Format(time.RFC3339),
+		"crash_start":   crashStart.Format(time.RFC3339),
+		"healthy_logs":  len(healthyLogs),
+		"crash_logs":    len(crashLogs),
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
+}
+
+// 🔧 NEW: Flexible time parsing (datetime-local OR RFC3339)
+func parseFlexibleTime(timeStr string) (time.Time, error) {
+	// Try RFC3339 first (Z timezone)
+	if t, err := time.Parse(time.RFC3339, timeStr); err == nil {
+		return t, nil
+	}
+
+	// Try datetime-local format (2006-01-02T15:04 → no seconds/Z)
+	if t, err := time.ParseInLocation("2006-01-02T15:04", timeStr, time.UTC); err == nil {
+		return t, nil
+	}
+
+	// Try with seconds (2006-01-02T15:04:05)
+	if t, err := time.ParseInLocation("2006-01-02T15:04:05", timeStr, time.UTC); err == nil {
+		return t, nil
+	}
+
+	return time.Time{}, fmt.Errorf("unrecognized time format: %s", timeStr)
 }
 
 func corsMiddleware(next http.HandlerFunc) http.HandlerFunc {
@@ -193,11 +260,24 @@ func corsMiddleware(next http.HandlerFunc) http.HandlerFunc {
 }
 
 func main() {
-	// Load environment variables from project root
-	if err := godotenv.Load("../../.env"); err != nil {
-		if err := godotenv.Load(".env"); err != nil {
-			log.Println("⚠️  .env file not found, using system environment variables")
+	// Load environment variables from project root - try multiple paths
+	envPaths := []string{
+		"../../.env",     // from cmd/server
+		".env",           // from project root
+		"./LogFlow/.env", // from parent
+	}
+
+	loaded := false
+	for _, envPath := range envPaths {
+		if err := godotenv.Load(envPath); err == nil {
+			log.Printf("✅ Loaded .env from: %s", envPath)
+			loaded = true
+			break
 		}
+	}
+
+	if !loaded {
+		log.Println("⚠️  .env file not found, using system environment variables")
 	}
 
 	// Initialize database
@@ -222,13 +302,15 @@ func main() {
 	http.HandleFunc("/ai/query", corsMiddleware(aiQueryHandler))
 	http.HandleFunc("/ai/summary", corsMiddleware(aiSummaryHandler))
 	http.HandleFunc("/health", corsMiddleware(healthHandler))
+	http.HandleFunc("/api/compare", corsMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/ai/compare?"+r.URL.RawQuery, http.StatusMovedPermanently)
+	}))
 	// Start background monitoring
 	go monitorErrorRate()
 	log.Println("🚀 LogFlow server listening on :8080")
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
 
-// POST /ingest - Store log in database
 // POST /ingest - Store log in database
 func ingestHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -254,17 +336,21 @@ func ingestHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 📝 DEBUG: Log ingestion details
+	log.Printf("📝 Ingesting log: Service=%s, Level=%s, Time=%s", evt.Service, evt.Level, ts.Format(time.RFC3339))
+
 	// Handle metadata - convert to JSONB or NULL
 	var metadataJSON interface{}
 	if len(evt.Metadata) > 0 {
 		metadataBytes, err := json.Marshal(evt.Metadata)
 		if err != nil {
-			http.Error(w, "Invalid metadata", http.StatusBadRequest)
-			return
+			log.Printf("⚠️ Invalid metadata, using NULL")
+			metadataJSON = nil // ✅ FALLBACK
+		} else {
+			metadataJSON = metadataBytes
 		}
-		metadataJSON = metadataBytes
 	} else {
-		metadataJSON = nil // ✅ Explicitly set to NULL
+		metadataJSON = nil // ✅ MISSING = NULL (no error!)
 	}
 
 	// Insert into database

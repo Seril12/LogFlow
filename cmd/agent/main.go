@@ -1,20 +1,21 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
-	"strings"
+	"time"
 )
 
 type LogEvent struct {
-	Service string
-	Level   string
-	Message string
-	Route   string
+	Timestamp string `json:"timestamp"`
+	Service   string
+	Level     string
+	Message   string
+	Route     string
+
 }
 
 func main() {
@@ -24,61 +25,49 @@ func main() {
 		serverURL = "http://localhost:8080" // Fallback for local dev
 	}
 
-	f, err := os.Open("app.log")
-	if err != nil {
-		fmt.Println("error opening file", err)
-		return
+	services := []string{"payment-service", "auth-service", "api-gateway", "database"}
+
+	// 3 Burst cycles: HEALTHY → CRASH → HEALTHY (perfect Time-Travel demo)
+	for cycle := 1; cycle <= 3; cycle++ {
+		fmt.Printf("\n🔄 CYCLE %d: HEALTHY PHASE (20 logs, INFO)...\n", cycle)
+
+		// HEALTHY: Low volume INFO logs (2min window)
+		for i := 0; i < 20; i++ {
+			log := LogEvent{
+				Timestamp: time.Now().UTC().Format(time.RFC3339),
+				Service:   services[i%4],
+				Level:     "INFO",
+				Message:   fmt.Sprintf("User session #%d active, latency=45ms", i+1),
+				Route:     "/api/users/login",
+			}
+			sendLog(serverURL, log)
+			time.Sleep(3 * time.Second) // Realistic rate
+		}
+
+		fmt.Printf("\n💥 CYCLE %d: CRASH PHASE (100 ERRORs, flood)...\n", cycle)
+
+		// CRASH: ERROR flood (30s window)
+		for i := 0; i < 100; i++ {
+			log := LogEvent{
+				Timestamp: time.Now().UTC().Format(time.RFC3339), // FRESH timestamps!
+				Service:   services[i%4],
+				Level:     "ERROR",
+				Message:   fmt.Sprintf("Stripe API timeout #%d - key=sk_live_xxx expired", i+1),
+				Route:     "/api/payments/process",
+			}
+			sendLog(serverURL, log)
+			time.Sleep(200 * time.Millisecond) // FLOOD!
+		}
+
+		fmt.Printf("\n✅ CYCLE %d COMPLETE - Time-Travel ready! (Check UI: healthy=just now, crash=2min ago)\n\n", cycle)
+		time.Sleep(10 * time.Second)
 	}
-	defer f.Close()
+}
 
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		line := scanner.Text()
-		parts := strings.Split(line, " ")
-
-		evt := LogEvent{}
-
-		for i, p := range parts {
-			if strings.HasPrefix(p, "message=") {
-				msgPart := strings.Join(parts[i:], " ")
-				val := strings.TrimPrefix(msgPart, "message=")
-				if len(val) >= 2 && val[0] == '"' && val[len(val)-1] == '"' {
-					val = val[1 : len(val)-1]
-				}
-				evt.Message = val
-				break
-			}
-
-			kv := strings.SplitN(p, "=", 2)
-			if len(kv) != 2 {
-				continue
-			}
-			key, val := kv[0], kv[1]
-
-			switch key {
-			case "service":
-				evt.Service = val
-			case "level":
-				evt.Level = val
-			case "route":
-				evt.Route = val
-			}
-		}
-
-		data, err := json.Marshal(evt)
-		if err != nil {
-			fmt.Println("error marshaling:", err)
-			continue
-		}
-
-		// ✅ Use serverURL variable instead of hardcoded localhost
-		resp, err := http.Post(serverURL+"/ingest", "application/json", bytes.NewReader(data))
-		if err != nil {
-			fmt.Println("error posting:", err)
-			continue
-		}
-		resp.Body.Close()
-
-		fmt.Println("SENT:", string(data))
+func sendLog(url string, log LogEvent) {
+	data, _ := json.Marshal(log)
+	resp, err := http.Post(url+"/ingest", "application/json", bytes.NewReader(data))
+	if err == nil && resp.StatusCode == 201 {
+		fmt.Printf("✅ %s %s %s\n", log.Timestamp[:19], log.Service, log.Level)
 	}
 }
