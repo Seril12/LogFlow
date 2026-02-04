@@ -73,6 +73,11 @@ export const getMetrics = async () => {
     cpu_usage: data?.cpu_usage ?? 0,
     requests_per_second: data?.requests_per_second ?? 0,
     services,
+    error_count: data?.error_count ?? errorCount,
+    info_count: data?.info_count ?? Number(logCounts.INFO ?? 0),
+    warning_count: data?.warning_count ?? Number(logCounts.WARNING ?? 0),
+    unique_services: data?.unique_services ?? 0,
+    all_services: Array.isArray(data?.all_services) ? data.all_services : [],
     log_counts: logCounts,
     top_services: topServices,
   };
@@ -94,10 +99,15 @@ export const ingestLog = (log) => apiCall('/ingest', {
   body: JSON.stringify(log),
 });
 
+// Advanced Metrics
+export const getAdvancedMetrics = async () => {
+  return apiCall('/metrics/advanced');
+};
+
 // Query AI
 export const queryAI = (question) => apiCall('/ai/query', {
   method: 'POST',
   body: JSON.stringify({ question }),
 });
 
-export default { checkHealth, getLogs, getMetrics, compareLogsPeriods, queryAI, getSummary, ingestLog };
+export default { checkHealth, getLogs, getMetrics, getAdvancedMetrics, compareLogsPeriods, queryAI, getSummary, ingestLog };

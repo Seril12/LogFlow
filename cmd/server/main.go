@@ -6,7 +6,10 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
+	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -146,6 +149,16 @@ func initDB() error {
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
 		return fmt.Errorf("DATABASE_URL environment variable not set")
+	}
+
+	// Ensure simple protocol for pooled Postgres (avoids prepared statement errors)
+	if parsedURL, err := url.Parse(dbURL); err == nil {
+		query := parsedURL.Query()
+		if query.Get("simple_protocol") == "" {
+			query.Set("simple_protocol", "true")
+			parsedURL.RawQuery = query.Encode()
+			dbURL = parsedURL.String()
+		}
 	}
 
 	var err error
@@ -335,6 +348,7 @@ func main() {
 	http.HandleFunc("/ai/compare", corsMiddleware(timeCompareHandler))
 	http.HandleFunc("/logs", corsMiddleware(logsHandler))
 	http.HandleFunc("/metrics", corsMiddleware(metricsHandler))
+	http.HandleFunc("/metrics/advanced", corsMiddleware(advancedMetricsHandler))
 	http.HandleFunc("/ai/query", corsMiddleware(aiQueryHandler))
 	http.HandleFunc("/ai/summary", corsMiddleware(aiSummaryHandler))
 	http.HandleFunc("/health", corsMiddleware(healthHandler))
@@ -448,19 +462,43 @@ func metricsHandler(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()
 
 	metrics := make(map[string]int)
+	totalLogs := 0
+	errorLogs := 0
+	infoLogs := 0
+	warnLogs := 0 
+
 	for rows.Next() {
 		var level string
 		var count int
 		rows.Scan(&level, &count)
-		metrics[level] = count
+
+		// Handle both "WARN" and "WARNING"
+		normalizedLevel := level
+		if level == "WARN" {
+			normalizedLevel = "WARNING"
+		}
+
+		metrics[normalizedLevel] = count
+		totalLogs += count
+
+		if normalizedLevel == "ERROR" {
+			errorLogs = count
+		}
+		if normalizedLevel == "INFO" {
+			infoLogs = count
+		}
+		if normalizedLevel == "WARNING" {
+			warnLogs = count
+		}
 	}
 
-	// Get top services
+	// Get top services by error count
 	serviceQuery := `
 		SELECT
 			service,
 			COUNT(*) as count
 		FROM logs
+		WHERE level = 'ERROR'
 		GROUP BY service
 		ORDER BY count DESC
 		LIMIT 5
@@ -473,18 +511,88 @@ func metricsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows2.Close()
 
-	topServices := make(map[string]int)
+	topServices := []map[string]interface{}{}
 	for rows2.Next() {
 		var service string
 		var count int
 		rows2.Scan(&service, &count)
-		topServices[service] = count
+		status := "Online"
+		if count > 5 {
+			status = "Degraded"
+		}
+		topServices = append(topServices, map[string]interface{}{
+			"name":   service,
+			"errors": count,
+			"status": status,
+		})
 	}
 
+	// Get all healthy services (services with INFO or no errors)
+	allServicesQuery := `
+		SELECT DISTINCT service
+		FROM logs
+		ORDER BY service ASC
+	`
+
+	rows3, err := db.Query(allServicesQuery)
+	if err != nil {
+		http.Error(w, "Error querying all services", http.StatusInternalServerError)
+		return
+	}
+	defer rows3.Close()
+
+	allServices := []map[string]interface{}{}
+	errorServiceNames := make(map[string]bool)
+	for _, svc := range topServices {
+		errorServiceNames[svc["name"].(string)] = true
+	}
+
+	for rows3.Next() {
+		var service string
+		rows3.Scan(&service)
+		if !errorServiceNames[service] {
+			allServices = append(allServices, map[string]interface{}{
+				"name":   service,
+				"errors": 0,
+				"status": "Online",
+			})
+		}
+	}
+
+	// Combine all services
+	allServices = append(allServices, topServices...)
+
+	// Calculate error rate
+	errorRate := 0
+	if totalLogs > 0 {
+		errorRate = (errorLogs * 100) / totalLogs
+	}
+
+	// Get unique services count
+	uniqueServicesQuery := `SELECT COUNT(DISTINCT service) FROM logs`
+	var serviceCount int
+	db.QueryRow(uniqueServicesQuery).Scan(&serviceCount)
+
+	// Debug logging
+	log.Printf("DEBUG METRICS: errorLogs=%d, infoLogs=%d, warnLogs=%d, totalLogs=%d, errorRate=%d%%", errorLogs, infoLogs, warnLogs, totalLogs, errorRate)
+	log.Printf("DEBUG METRICS: metrics map = %v", metrics)
+
 	response := map[string]interface{}{
-		"log_counts":   metrics,
-		"top_services": topServices,
-		"timestamp":    time.Now().Format(time.RFC3339),
+		"log_counts": map[string]interface{}{
+			"ERROR":   errorLogs,
+			"INFO":    infoLogs,
+			"WARNING": warnLogs,
+			"total":   totalLogs,
+		},
+		"error_rate":      errorRate,
+		"top_services":    topServices,
+		"all_services":    allServices,
+		"unique_services": serviceCount,
+		"error_count":     errorLogs,
+		"info_count":      infoLogs,
+		"warning_count":   warnLogs,
+		"avg_latency":     0,
+		"timestamp":       time.Now().Format(time.RFC3339),
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -940,4 +1048,161 @@ func healthHandler(w http.ResponseWriter, r *http.Request) {
 		"status":   "healthy",
 		"database": "connected",
 	})
+}
+
+// Advanced metrics handler - extract structured data from log messages
+func advancedMetricsHandler(w http.ResponseWriter, r *http.Request) {
+	query := `
+		SELECT message, level, service FROM logs 
+		WHERE message IS NOT NULL 
+		ORDER BY created_at DESC LIMIT 10000
+	`
+
+	rows, err := db.Query(query)
+	if err != nil {
+		http.Error(w, "Error querying logs", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	userIDs := make(map[string]int)
+	orderIDs := make(map[string]int)
+	productIDs := make(map[string]int)
+	errorReasons := make(map[string]int)
+	responseTimes := []int{}
+	attemptCounts := []int{}
+	stockLevels := []int{}
+
+	for rows.Next() {
+		var message, level, service string
+		rows.Scan(&message, &level, &service)
+
+		// Extract user_id
+		userRe := regexp.MustCompile(`user_id=([a-zA-Z0-9_-]+)`)
+		if matches := userRe.FindStringSubmatch(message); len(matches) > 1 {
+			userIDs[matches[1]]++
+		}
+
+		// Extract order_id
+		orderRe := regexp.MustCompile(`order_id=([A-Z0-9-]+)`)
+		if matches := orderRe.FindStringSubmatch(message); len(matches) > 1 {
+			orderIDs[matches[1]]++
+		}
+
+		// Extract product_id
+		productRe := regexp.MustCompile(`product_id=([A-Z0-9-]+)`)
+		if matches := productRe.FindStringSubmatch(message); len(matches) > 1 {
+			productIDs[matches[1]]++
+		}
+
+		// Extract error reasons
+		reasonRe := regexp.MustCompile(`reason=([a-zA-Z_]+)`)
+		if matches := reasonRe.FindStringSubmatch(message); len(matches) > 1 {
+			errorReasons[matches[1]]++
+		}
+
+		// Extract response times (duration or timeout)
+		durationRe := regexp.MustCompile(`duration=(\d+)ms`)
+		if matches := durationRe.FindStringSubmatch(message); len(matches) > 1 {
+			if val, err := strconv.Atoi(matches[1]); err == nil {
+				responseTimes = append(responseTimes, val)
+			}
+		}
+
+		timeoutRe := regexp.MustCompile(`timeout=(\d+)ms`)
+		if matches := timeoutRe.FindStringSubmatch(message); len(matches) > 1 {
+			if val, err := strconv.Atoi(matches[1]); err == nil {
+				responseTimes = append(responseTimes, val)
+			}
+		}
+
+		// Extract attempt counts
+		attemptsRe := regexp.MustCompile(`attempts=(\d+)`)
+		if matches := attemptsRe.FindStringSubmatch(message); len(matches) > 1 {
+			if val, err := strconv.Atoi(matches[1]); err == nil {
+				attemptCounts = append(attemptCounts, val)
+			}
+		}
+
+		// Extract stock levels
+		stockRe := regexp.MustCompile(`current_stock=(\d+)`)
+		if matches := stockRe.FindStringSubmatch(message); len(matches) > 1 {
+			if val, err := strconv.Atoi(matches[1]); err == nil {
+				stockLevels = append(stockLevels, val)
+			}
+		}
+	}
+
+	// Calculate averages
+	avgResponseTime := 0
+	if len(responseTimes) > 0 {
+		sum := 0
+		for _, t := range responseTimes {
+			sum += t
+		}
+		avgResponseTime = sum / len(responseTimes)
+	}
+
+	avgAttempts := 0
+	if len(attemptCounts) > 0 {
+		sum := 0
+		for _, a := range attemptCounts {
+			sum += a
+		}
+		avgAttempts = sum / len(attemptCounts)
+	}
+
+	avgStock := 0
+	if len(stockLevels) > 0 {
+		sum := 0
+		for _, s := range stockLevels {
+			sum += s
+		}
+		avgStock = sum / len(stockLevels)
+	}
+
+	// Convert maps to slices for JSON (top 10 each)
+	topUsers := getTopN(userIDs, 10)
+	topOrders := getTopN(orderIDs, 10)
+	topProducts := getTopN(productIDs, 10)
+	topReasons := getTopN(errorReasons, 10)
+
+	response := map[string]interface{}{
+		"top_users":          topUsers,
+		"top_orders":         topOrders,
+		"top_products":       topProducts,
+		"top_error_reasons":  topReasons,
+		"avg_response_time":  avgResponseTime,
+		"total_timeouts":     len(responseTimes),
+		"avg_retry_attempts": avgAttempts,
+		"avg_stock_level":    avgStock,
+		"timestamp":          time.Now().Format(time.RFC3339),
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+// Helper to get top N items from map
+func getTopN(m map[string]int, n int) []map[string]interface{} {
+	type kv struct {
+		Key   string
+		Value int
+	}
+	var kvs []kv
+	for k, v := range m {
+		kvs = append(kvs, kv{k, v})
+	}
+	sort.Slice(kvs, func(i, j int) bool {
+		return kvs[i].Value > kvs[j].Value
+	})
+
+	result := []map[string]interface{}{}
+	for i := 0; i < n && i < len(kvs); i++ {
+		result = append(result, map[string]interface{}{
+			"name":  kvs[i].Key,
+			"count": kvs[i].Value,
+		})
+	}
+	return result
 }

@@ -5,14 +5,13 @@ import { getMetrics } from '../../../services/api';
 
 export default function SystemMetrics() {
   const [metrics, setMetrics] = useState({
-    uptime: 0,
+    log_counts: { ERROR: 0, INFO: 0, WARNING: 0, total: 0 },
     error_rate: 0,
-    avg_latency: 0,
-    active_connections: 0,
-    memory_usage: 0,
-    cpu_usage: 0,
-    requests_per_second: 0,
-    services: [],
+    error_count: 0,
+    info_count: 0,
+    warning_count: 0,
+    unique_services: 0,
+    all_services: [],
   });
 
   useEffect(() => {
@@ -26,87 +25,88 @@ export default function SystemMetrics() {
     };
 
     handleFetchMetrics();
-    const interval = setInterval(handleFetchMetrics, 5000);
+    const interval = setInterval(handleFetchMetrics, 3000);
     return () => clearInterval(interval);
   }, []);
 
-  const getHealthColor = (value, threshold = 50) => {
-    if (value < threshold) return '#238636';
-    if (value < 75) return '#d29922';
+  const getStatusColor = (status) => {
+    if (status === 'Online') return '#238636';
+    if (status === 'Degraded') return '#d29922';
     return '#ff4757';
   };
 
   return (
     <div className="tab-pane metrics-grid">
       <div className="metric-card">
-        <div className="metric-label">Uptime</div>
-        <div className="metric-value">{metrics.uptime || '0'}h</div>
+        <div className="metric-label">Total Logs</div>
+        <div className="metric-value">{metrics.log_counts?.total || 0}</div>
       </div>
 
       <div className="metric-card">
         <div className="metric-label">Error Rate</div>
         <div
           className="metric-value"
-          style={{ color: getHealthColor(metrics.error_rate) }}
+          style={{ color: metrics.error_rate > 50 ? '#ff4757' : '#238636' }}
         >
-          {metrics.error_rate || '0'}%
+          {metrics.error_rate || 0}%
         </div>
       </div>
 
       <div className="metric-card">
-        <div className="metric-label">Avg Latency</div>
-        <div className="metric-value">{metrics.avg_latency || '0'}ms</div>
-      </div>
-
-      <div className="metric-card">
-        <div className="metric-label">Active Connections</div>
-        <div className="metric-value">{metrics.active_connections || '0'}</div>
-      </div>
-
-      <div className="metric-card">
-        <div className="metric-label">Memory Usage</div>
-        <div
-          className="metric-value"
-          style={{ color: getHealthColor(metrics.memory_usage) }}
-        >
-          {metrics.memory_usage || '0'}%
+        <div className="metric-label">Error Count</div>
+        <div className="metric-value" style={{ color: '#ff4757' }}>
+          {metrics.error_count || 0}
         </div>
       </div>
 
       <div className="metric-card">
-        <div className="metric-label">CPU Usage</div>
-        <div
-          className="metric-value"
-          style={{ color: getHealthColor(metrics.cpu_usage) }}
-        >
-          {metrics.cpu_usage || '0'}%
+        <div className="metric-label">Info Logs</div>
+        <div className="metric-value" style={{ color: '#4d90fe' }}>
+          {metrics.info_count || 0}
         </div>
       </div>
 
       <div className="metric-card">
-        <div className="metric-label">Requests/sec</div>
-        <div className="metric-value">{metrics.requests_per_second || '0'}</div>
+        <div className="metric-label">Warnings</div>
+        <div className="metric-value" style={{ color: '#d29922' }}>
+          {metrics.warning_count || 0}
+        </div>
+      </div>
+
+      <div className="metric-card">
+        <div className="metric-label">Active Services</div>
+        <div className="metric-value" style={{ color: '#238636' }}>
+          {metrics.unique_services || 0}
+        </div>
       </div>
 
       <div className="metric-card wide">
         <div className="metric-label">Service Health</div>
         <div className="services-list">
-          {Array.isArray(metrics.services) && metrics.services.length > 0 ? (
-            metrics.services.map((service, index) => (
+          {Array.isArray(metrics.all_services) && metrics.all_services.filter(s => s.errors > 0).length > 0 ? (
+            metrics.all_services.filter(s => s.errors > 0).map((service, index) => (
               <div key={index} className="service-item">
                 <span className="service-name">{service.name}</span>
-                <span
-                  className="service-status"
-                  style={{
-                    backgroundColor: service.healthy ? '#238636' : '#ff4757',
-                  }}
-                >
-                  {service.healthy ? 'Online' : 'Offline'}
-                </span>
+                <div className="service-info">
+                  <span className="service-errors">{service.errors} errors</span>
+                  <span
+                    className="service-status"
+                    style={{
+                      color: getStatusColor(service.status),
+                      backgroundColor: getStatusColor(service.status) + '20',
+                      padding: '4px 12px',
+                      borderRadius: '12px',
+                      fontSize: '12px',
+                      fontWeight: '600',
+                    }}
+                  >
+                    {service.status}
+                  </span>
+                </div>
               </div>
             ))
           ) : (
-            <div className="service-item">No services available</div>
+            <p style={{ color: '#8b949e' }}>No services available</p>
           )}
         </div>
       </div>

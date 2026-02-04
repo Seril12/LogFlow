@@ -4,12 +4,14 @@ import React from 'react';
 import TimeTravelDebugger from './Tabs/TimeTravelDebugger';
 import AiAssistant from './Tabs/AiAssistant';
 import SystemMetrics from './Tabs/SystemMetrics';
+import AdvancedMetrics from './Tabs/AdvancedMetrics';
 
 export default function MainContent({ activeTab, setActiveTab, onSelectLogWindow }) {
   const tabs = [
     { id: 'debugger', label: 'Time-Travel Debugger', icon: '⏮️' },
     { id: 'ai', label: 'AI Assistant', icon: '🤖' },
     { id: 'metrics', label: 'System Metrics', icon: '📊' },
+    { id: 'advanced', label: 'Advanced Metrics', icon: '📈' },
   ];
 
   return (
@@ -33,6 +35,7 @@ export default function MainContent({ activeTab, setActiveTab, onSelectLogWindow
         )}
         {activeTab === 'ai' && <AiAssistant />}
         {activeTab === 'metrics' && <SystemMetrics />}
+        {activeTab === 'advanced' && <AdvancedMetrics />}
       </div>
     </main>
   );

@@ -15,7 +15,6 @@ type LogEvent struct {
 	Level     string
 	Message   string
 	Route     string
-
 }
 
 func main() {
@@ -29,15 +28,30 @@ func main() {
 
 	// 3 Burst cycles: HEALTHY → CRASH → HEALTHY (perfect Time-Travel demo)
 	for cycle := 1; cycle <= 3; cycle++ {
-		fmt.Printf("\n🔄 CYCLE %d: HEALTHY PHASE (20 logs, INFO)...\n", cycle)
+		fmt.Printf("\n🔄 CYCLE %d: HEALTHY PHASE (20 logs, mixed)...\n", cycle)
 
-		// HEALTHY: Low volume INFO logs (2min window)
+		// HEALTHY: Mix of INFO and WARNING logs (2min window)
 		for i := 0; i < 20; i++ {
+			level := "INFO"
+			// Generate rich metadata for metrics extraction
+			userID := fmt.Sprintf("user_%d", (i%10)+1)
+			productID := fmt.Sprintf("PROD-%03d", (i%5)+1)
+			duration := 45 + (i * 2)
+			
+			message := fmt.Sprintf("Order processed successfully user_id=%s product_id=%s duration=%dms current_stock=%d", 
+				userID, productID, duration, 100-i)
+
+			if i%5 == 0 {
+				level = "WARNING"
+				message = fmt.Sprintf("Slow request detected user_id=%s duration=%dms attempts=%d", 
+					userID, duration+200, (i%3)+1)
+			}
+
 			log := LogEvent{
 				Timestamp: time.Now().UTC().Format(time.RFC3339),
 				Service:   services[i%4],
-				Level:     "INFO",
-				Message:   fmt.Sprintf("User session #%d active, latency=45ms", i+1),
+				Level:     level,
+				Message:   message,
 				Route:     "/api/users/login",
 			}
 			sendLog(serverURL, log)
@@ -52,7 +66,7 @@ func main() {
 				Timestamp: time.Now().UTC().Format(time.RFC3339), // FRESH timestamps!
 				Service:   services[i%4],
 				Level:     "ERROR",
-				Message:   fmt.Sprintf("Stripe API timeout #%d - key=sk_live_xxx expired", i+1),
+				Message:   fmt.Sprintf("Transaction failed order_id=ORD-%d reason=TIMEOUT timeout=5000ms attempts=3", i+5000),
 				Route:     "/api/payments/process",
 			}
 			sendLog(serverURL, log)
