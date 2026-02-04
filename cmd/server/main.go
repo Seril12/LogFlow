@@ -654,6 +654,9 @@ type AIQueryResponse struct {
 	Answer       string     `json:"answer"`
 	RelevantLogs []LogEvent `json:"relevant_logs"`
 	LogCount     int        `json:"log_count"`
+	ErrorCount   int        `json:"error_count"`
+	TimeRange    string     `json:"time_range"`
+	Services     []string   `json:"services"`
 }
 
 func aiQueryHandler(w http.ResponseWriter, r *http.Request) {
@@ -673,28 +676,50 @@ func aiQueryHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Query logs from database
+	log.Printf("🤖 AI Query: '%s'", req.Question)
+
+	// 🧠 Smart time window detection based on question
+	var fromTime, toTime time.Time
+	var timeDesc string
+	toTime = time.Now().UTC()
+
+	questionLower := strings.ToLower(req.Question)
+
+	if strings.Contains(questionLower, "yesterday") {
+		// Yesterday: 00:00 to 23:59 of previous day
+		yesterday := toTime.AddDate(0, 0, -1)
+		fromTime = time.Date(yesterday.Year(), yesterday.Month(), yesterday.Day(), 0, 0, 0, 0, time.UTC)
+		toTime = time.Date(yesterday.Year(), yesterday.Month(), yesterday.Day(), 23, 59, 59, 0, time.UTC)
+		timeDesc = "yesterday"
+	} else if strings.Contains(questionLower, "last 24 hour") || strings.Contains(questionLower, "past 24 hour") {
+		fromTime = toTime.Add(-24 * time.Hour)
+		timeDesc = "last 24 hours"
+	} else if strings.Contains(questionLower, "last 12 hour") {
+		fromTime = toTime.Add(-12 * time.Hour)
+		timeDesc = "last 12 hours"
+	} else if strings.Contains(questionLower, "last 6 hour") {
+		fromTime = toTime.Add(-6 * time.Hour)
+		timeDesc = "last 6 hours"
+	} else if strings.Contains(questionLower, "today") {
+		// Today: 00:00 to now
+		fromTime = time.Date(toTime.Year(), toTime.Month(), toTime.Day(), 0, 0, 0, 0, time.UTC)
+		timeDesc = "today"
+	} else {
+		// Default: last 1 hour
+		fromTime = toTime.Add(-1 * time.Hour)
+		timeDesc = "last 1 hour"
+	}
+
+	log.Printf("   Time window: %s (%s to %s)", timeDesc, fromTime.Format("15:04"), toTime.Format("15:04"))
+
 	query := `
 		SELECT id, timestamp, service, level, route, message, metadata, created_at
 		FROM logs
-		WHERE 1=1
+		WHERE timestamp BETWEEN $1 AND $2
+		ORDER BY timestamp DESC
+		LIMIT 100
 	`
-	args := []interface{}{}
-	argCount := 1
-
-	if req.Service != "" {
-		query += fmt.Sprintf(" AND service = $%d", argCount)
-		args = append(args, req.Service)
-		argCount++
-	}
-
-	if req.Level != "" {
-		query += fmt.Sprintf(" AND level = $%d", argCount)
-		args = append(args, req.Level)
-		argCount++
-	}
-
-	query += " ORDER BY timestamp DESC LIMIT 20"
+	args := []interface{}{fromTime, toTime}
 
 	rows, err := db.Query(query, args...)
 	if err != nil {
@@ -737,14 +762,49 @@ func aiQueryHandler(w http.ResponseWriter, r *http.Request) {
 			evt.Timestamp, evt.Service, evt.Level, evt.Message)
 	}
 
-	prompt := fmt.Sprintf(`You are an expert SRE assistant analyzing application logs.
+	// Build summary for Gemini
+	errorCount := 0
+	serviceMap := make(map[string]bool)
+	for _, log := range relevantLogs {
+		if log.Level == "ERROR" {
+			errorCount++
+		}
+		serviceMap[log.Service] = true
+	}
 
-Context (Recent Logs):
+	// Convert service map to slice
+	var services []string
+	for s := range serviceMap {
+		services = append(services, s)
+	}
+
+	prompt := fmt.Sprintf(`You are LogFlow Sentinel, an expert SRE assistant.
+
+**Context:** Logs from %s (%d total, %d errors)
+
+**Logs (newest first):**
 %s
 
-User Question: %s
+**User Question:** %s
 
-Please provide a concise answer based on the logs above.`, context, req.Question)
+**Output Format (IMPORTANT - Use plain text, NO markdown):**
+
+⚠️ ISSUE:
+[one-line summary]
+
+ROOT CAUSE:
+[specific issue with details]
+
+AFFECTED SERVICES:
+[comma-separated list]
+
+TIME STARTED:
+[timestamp]
+
+🔧 ACTION REQUIRED:
+[numbered steps]
+
+Use plain text only. No ** or markdown. Add line breaks between sections.`, timeDesc, len(relevantLogs), errorCount, context, req.Question)
 
 	answer, err := geminiClient.Query(prompt)
 	if err != nil {
@@ -754,9 +814,12 @@ Please provide a concise answer based on the logs above.`, context, req.Question
 	}
 
 	response := AIQueryResponse{
-		Answer:       answer,
+		Answer:       fmt.Sprintf("🔍 Analyzed: %s\n\n%s\n\n📊 SUMMARY: %d logs | %d errors | %d services", timeDesc, answer, len(relevantLogs), errorCount, len(services)),
 		RelevantLogs: relevantLogs,
 		LogCount:     len(relevantLogs),
+		ErrorCount:   errorCount,
+		TimeRange:    timeDesc,
+		Services:     services,
 	}
 
 	w.Header().Set("Content-Type", "application/json")

@@ -511,6 +511,7 @@ body,
   font-size: 13px;
   line-height: 1.5;
   word-wrap: break-word;
+  white-space: pre-wrap;
 }
 
 .message.user .message-content {
