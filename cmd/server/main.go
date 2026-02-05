@@ -389,8 +389,15 @@ func main() {
 	}))
 	// Start background monitoring
 	go monitorErrorRate()
-	log.Println("🚀 LogFlow server listening on :8080")
-	log.Fatal(http.ListenAndServe(":8080", nil))
+
+	// Handle dynamic port for deployment (Render, Railway, Cloud Run)
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+
+	log.Printf("🚀 LogFlow server listening on :%s", port)
+	log.Fatal(http.ListenAndServe(":"+port, nil))
 }
 
 // POST /ingest - Store log in database
