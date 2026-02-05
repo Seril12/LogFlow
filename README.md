@@ -1,8 +1,8 @@
 #  LogFlow: The Gemini-3 Cloud Observer
 ### Next-Generation SRE Observability & Multimodal AI Diagnostics
 
-[![Live Demo](https://img.shields.io/badge/Live-Demo-brightgreen?style=for-the-badge)](https://log-flow-ten.vercel.app/)
-[![Status](https://img.shields.io/badge/status-active-success?style=for-the-badge)](https://log-flow-ten.vercel.app/)
+[![Live Demo](https://img.shields.io/badge/Live-Demo-brightgreen?style=for-the-badge)](https://logflow-psi.vercel.app/)
+[![Status](https://img.shields.io/badge/status-active-success?style=for-the-badge)](https://logflow-psi.vercel.app/)
 [![Go](https://img.shields.io/badge/Go-1.21+-00ADD8?style=for-the-badge&logo=go)](https://go.dev)
 [![React](https://img.shields.io/badge/React-18-61DAFB?style=for-the-badge&logo=react)](https://reactjs.org)
 
