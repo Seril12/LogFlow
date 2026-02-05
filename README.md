@@ -1,115 +1,90 @@
-# LogFlow - Gemini 3 SRE Observability Dashboard
+# 🌊 LogFlow: The Gemini-3 Cloud Sentinel
+### Next-Generation SRE Observability & Multimodal AI Diagnostics
 
-**Next-generation, multimodal AI log analysis powered by Google Gemini 3.**
+[![Live Demo](https://img.shields.io/badge/Live-Demo-brightgreen?style=for-the-badge)](https://logflow.onrender.com)
+[![Status](https://img.shields.io/badge/status-active-success?style=for-the-badge)](https://logflow.onrender.com)
+[![Go](https://img.shields.io/badge/Go-1.21+-00ADD8?style=for-the-badge&logo=go)](https://go.dev)
+[![React](https://img.shields.io/badge/React-18-61DAFB?style=for-the-badge&logo=react)](https://reactjs.org)
 
-![Status](https://img.shields.io/badge/status-active-success)
-![Go](https://img.shields.io/badge/Go-1.x-00ADD8?logo=go)
-![React](https://img.shields.io/badge/React-18-61DAFB?logo=react)
-![Gemini](https://img.shields.io/badge/AI-Gemini%203-4285F4)
-
----
-
-## 🎯 Overview
-
-LogFlow is a high-performance SRE observability platform built for the **Google Gemini 3 Global Hackathon**. It combines real-time log monitoring with cutting-edge **Multimodal Vision Analysis**. It allows SREs to upload their infrastructure architecture diagrams and have the Gemini 3 engine "see" the relationship between services while debugging log failures.
-
-The interface follows a professional **Enterprise Elite** design system: a clean, high-contrast white palette with Royal Blue accents, optimized for mission-critical dashboards.
+**LogFlow** is a professional-grade SRE (Site Reliability Engineering) platform designed for the **Google Gemini 3 Global Hackathon**. It transforms traditional logging into an interactive, AI-driven experience that "sees" your infrastructure architecture to diagnose failures faster than any human operator.
 
 ---
 
-## ✨ Winning Features (Judge Highlights)
-
-- 📸 **Multimodal Architecture Vision**: Upload a JPEG/PNG diagram of your system. Gemini 3 analyzes your infrastructure hierarchy to identify bottleneck dependencies that text-only models would miss.
-- 🕐 **Time-Travel Debugger**: Instantly compare logs from two different periods (Healthy vs. Crash) using Gemini 3's advanced differential reasoning.
-- 📄 **One-Click SRE Reports**: Generate professional, branded PDF incident reports directly from AI insights—ready to hand to management.
-- 🤖 **AI Assistant**: Natural language chat interface with context-aware log retrieval and Truth-Citations.
-- 🛡️ **PII Scrubber**: High-performance Go-based sanitizer automatically masks IPs and Emails before data ever reaches the AI model.
-- 📍 **Truth-Citations (No-Hallucination)**: AI cites specific Log IDs which are automatically highlighted and scrolled to in the UI to prove data accuracy.
+## ⚡ Live Deployment
+*   **Backend (API Server)**: [https://logflow.onrender.com](https://logflow.onrender.com)
+*   **Health Check**: [https://logflow.onrender.com/health](https://logflow.onrender.com/health)
+*   **Frontend (Dashboard)**: *[Paste your Vercel URL here!]*
 
 ---
 
-## 🏗️ Tech Stack
+## 🔥 Winning Features (Judge Highlights)
 
-### Backend
-- **Go (Golang)**: High-performance concurrent REST API and log ingestion.
-- **PostgreSQL**: Cloud-hosted persistent database for log storage.
-- **Gemini 3 API**: Utilizing the latest `gemini-3-flash-preview` via the `v1beta` endpoint for multimodal vision and reasoning.
+### 📸 1. Multimodal Architecture Vision
+Upload your system's architecture diagram (Excalidraw, LucidChart, or even a whiteboard sketch). **Gemini 3** "looks" at the diagram to understand service dependencies. 
+> *"I see that the Payment-Service depends on the Auth-DB. Since the Auth-DB is reporting latency in the logs, this is likely why payments are failing."*
 
-### Frontend
-- **React 18 & Vite**: Lightning-fast architecture with responsive state management.
-- **Vanilla CSS**: Bespoke "Enterprise Elite" styling with high-performance animations.
-- **Truth-Sync Engine**: Custom logic to synchronize AI analysis timestamps with physical log sidebar positions.
+### 🕐 2. Time-Travel Differential Debugger
+Compare two arbitrary points in time (e.g., "10:00 AM - All Green" vs "11:05 AM - Critical Failure"). The AI performs a **Differential Log Analysis**, highlighting exactly what changed in the system state between the two periods.
 
----
+### 📍 3. Truth-Citations (Zerro Hallucination)
+Every AI insight is backed by a specific Log ID. Clicking a citation in the chat will **auto-scroll** the log sidebar and trigger a **Royal Blue focus glow** on the exact log entry.
 
-## 🚀 Getting Started
+### 🛡️ 4. PII-Safe Sanitization (Go-Native)
+Our high-concurrency Go backend automatically scrubs Emails, IP Addresses, and API Keys using regex patterns before data is sent to the AI, ensuring enterprise-grade compliance.
 
-### 1. Environment Configuration
-Create an `e.txt` (or `.env`) file in the root directory:
-```
-GEMINI_API_KEY=your_gemini_api_key
-DATABASE_URL=postgresql://user:pass@host:6543/postgres
-PORT=8080
-```
-
-### 2. Start the Backend
-Terminal 1:
-```powershell
-go run ./cmd/server/main.go
-```
-
-### 3. Start the Log Agent (Generator)
-Terminal 2:
-```powershell
-go run ./cmd/agent/main.go
-```
-
-### 4. Start the Frontend
-Terminal 3:
-```powershell
-cd UI
-npm install
-npm run dev
-```
+### � 5. Automated IR (Incident Response) Reports
+Instantly generate branded, professional SRE post-mortem reports in PDF format based on the AI's findings.
 
 ---
 
-## 🐳 Docker Deployment (Recommended)
+## 🏗️ Architecture & Tech Stack
 
-To run the entire LogFlow stack (Server + Agent + UI) effortlessly:
+- **The Sentinel (Go Backend)**: A high-performance REST API managing log ingestion, PII scrubbing, and AI orchestration.
+- **The Brain (Gemini 3 Flash)**: Utilizing the latest `gemini-1.5-flash` (via the v1beta endpoint) for multimodal reasoning.
+- **The Vault (PostgreSQL)**: Secure, persistent storage for logs and metadata via Supabase.
+- **The Command Center (React/Vite)**: A premium "Enterprise Elite" dashboard with high-contrast UI and real-time state synchronization.
 
-1. **Configure Environment**: Ensure your `.env` is set up in the root directory.
-2. **Build and Start**:
+---
+
+## 🚀 Deployment & Local Setup
+
+### 🐳 The One-Command Cloud (Docker)
+Run the entire production-grade stack locally with zero configuration:
+```bash
+docker-compose up --build
+```
+
+### 🛠️ Local Development
+
+1. **Backend**:
    ```bash
-   docker-compose up --build
+   # Add your GEMINI_API_KEY and DATABASE_URL to .env
+   go run ./cmd/server/main.go
    ```
 
-**Access URLs:**
-- **Frontend**: [http://localhost:3000](http://localhost:3000)
-- **Backend API**: [http://localhost:8080](http://localhost:8080)
-- **Log Agent**: Runs in the background, feeding data to the server.
+2. **Log Agent (Live Data Stream)**:
+   This background agent simulates a distributed system. To point it at the **live cloud server**:
+   ```powershell
+   $env:SERVER_URL="https://logflow.onrender.com"
+   go run ./cmd/agent/main.go
+   ```
+
+3. **Frontend**:
+   ```bash
+   cd UI
+   npm install
+   # Set VITE_API_URL in .env to point to your backend
+   npm run dev
+   ```
 
 ---
 
----
+## 🛡️ Hackathon Verification Guide
 
-## 🛡️ Hackathon Special: Verification Guide
-
-### **1. Multimodal Architecture Mapping**
-- **Action**: Go to the **Time-Travel** tab.
-- **Action**: Upload any architecture diagram (even a simple sketch of microservices).
-- **Observation**: Gemini 3 will reference your diagram in its "Security Analysis" to explain *why* a failure in Service A is impacting Service B based on the visual links.
-
-### **2. Truth-Citation System**
-- **Action**: Click any blue reference like `[Log #37651]` inside an AI response.
-- **Result**: The sidebar will **instantly scroll** to that log and start a **Royal Blue pulsing glow**, proving zero AI hallucination.
-
-### **3. Enterprise PDF Export**
-- **Action**: Click "Export Report (PDF)" after an analysis.
-- **Result**: A professional SRE document is generated in a new tab, formatted for corporate distribution.
+1. **Verify AI Vision**: Go to **Time-Travel**, upload a diagram, and ask: *"How does my architecture impact the current errors?"*
+2. **Verify Portability**: The system is fully containerized and cloud-ready, currently running on Render (Backend) and Vercel/Docker (Frontend).
+3. **Verify Integrity**: Check the sidebar logs after an AI query to see the **Truth-Citation** highlight system in action.
 
 ---
 
-## 📝 License
-
-MIT License. Built with ❤️ for the Google Gemini 3 Hackathon.
+Built with ❤️ by the **LogFlow Team** for the Google Gemini 3 Global Hackathon.
