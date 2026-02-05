@@ -15,8 +15,15 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o agent ./cmd/agent
 #Stage 2: Runtime (alpine:latest)
 FROM alpine:latest
 
+RUN apk add --no-cache ca-certificates
+
 WORKDIR /app
 
+# Create a non-root user for security
+RUN adduser -D logflow
 COPY --from=builder /app/agent .
+RUN chown -R logflow:logflow /app
+
+USER logflow
 
 CMD ["./agent"]

@@ -74,6 +74,25 @@ npm run dev
 
 ---
 
+## 🐳 Docker Deployment (Recommended)
+
+To run the entire LogFlow stack (Server + Agent + UI) effortlessly:
+
+1. **Configure Environment**: Ensure your `.env` is set up in the root directory.
+2. **Build and Start**:
+   ```bash
+   docker-compose up --build
+   ```
+
+**Access URLs:**
+- **Frontend**: [http://localhost:3000](http://localhost:3000)
+- **Backend API**: [http://localhost:8080](http://localhost:8080)
+- **Log Agent**: Runs in the background, feeding data to the server.
+
+---
+
+---
+
 ## 🛡️ Hackathon Special: Verification Guide
 
 ### **1. Multimodal Architecture Mapping**

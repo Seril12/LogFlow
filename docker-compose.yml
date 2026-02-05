@@ -4,9 +4,14 @@
       context: .
       dockerfile: Dockerfile.server
     ports:
-      - "8081:8080"
+      - "8080:8080"
     env_file:
       - .env
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     restart: unless-stopped
 
   agent:
@@ -15,8 +20,20 @@
       dockerfile: Dockerfile.agent
     environment:
       - SERVER_URL=http://server:8080
-    volumes:
-      - ./app.log:/app/app.log:ro
     depends_on:
-      - server
+      server:
+        condition: service_healthy
+    restart: unless-stopped
+
+  ui:
+    build:
+      context: .
+      dockerfile: Dockerfile.ui
+      args:
+        - VITE_API_URL=http://localhost:8080
+    ports:
+      - "3000:80"
+    depends_on:
+      server:
+        condition: service_healthy
     restart: unless-stopped
