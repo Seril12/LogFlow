@@ -1,4 +1,4 @@
-# 🌊 LogFlow: The Gemini-3 Cloud Sentinel
+# 🌊 LogFlow: The Gemini-3 Cloud Observer
 ### Next-Generation SRE Observability & Multimodal AI Diagnostics
 
 [![Live Demo](https://img.shields.io/badge/Live-Demo-brightgreen?style=for-the-badge)](https://logflow.onrender.com)
@@ -26,13 +26,19 @@ Upload your system's architecture diagram (Excalidraw, LucidChart, or even a whi
 ### 🕐 2. Time-Travel Differential Debugger
 Compare two arbitrary points in time (e.g., "10:00 AM - All Green" vs "11:05 AM - Critical Failure"). The AI performs a **Differential Log Analysis**, highlighting exactly what changed in the system state between the two periods.
 
-### 📍 3. Truth-Citations (Zerro Hallucination)
+### 📺 3. Live Stream Console
+A terminal-style **Real-time Log Stream** integrated into the dashboard. Features auto-scroll, log-clearing, and color-coded level indicators for immediate situational awareness.
+
+### ⚡ 4. Instant Simulation Engine
+Don't have a live system to connect? Use the **⚡ Lightning Bolt** button in the sidebar to simulate complex error bursts and healthy cycles directly from the UI. Perfect for rapid AI testing and judging demonstrations.
+
+### 📍 5. Truth-Citations (Zero Hallucination)
 Every AI insight is backed by a specific Log ID. Clicking a citation in the chat will **auto-scroll** the log sidebar and trigger a **Royal Blue focus glow** on the exact log entry.
 
-### 🛡️ 4. PII-Safe Sanitization (Go-Native)
+### 🛡️ 6. PII-Safe Sanitization (Go-Native)
 Our high-concurrency Go backend automatically scrubs Emails, IP Addresses, and API Keys using regex patterns before data is sent to the AI, ensuring enterprise-grade compliance.
 
-### � 5. Automated IR (Incident Response) Reports
+### 📝 7. Automated IR (Incident Response) Reports
 Instantly generate branded, professional SRE post-mortem reports in PDF format based on the AI's findings.
 
 ---
