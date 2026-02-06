@@ -11,9 +11,9 @@
 ---
 
 ## Live Deployment
-*   **Backend (API Server)**: [https://logflow.onrender.com](https://logflow.onrender.com)
-*   **Health Check**: [https://logflow.onrender.com/health](https://logflow.onrender.com/health)
-*   **Frontend (Dashboard)**: [https://log-flow-ten.vercel.app/](https://log-flow-ten.vercel.app/)
+*   **Backend (API Server)**: [https://logflow-api.onrender.com](https://logflow-api.onrender.com)
+*   **Health Check**: [https://logflow-api.onrender.com/health](https://logflow-api.onrender.com/health)
+*   **Frontend (Dashboard)**: [https://logflow-psi.vercel.app/](https://logflow-psi.vercel.app/)
 
 ---
 
