@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -22,6 +23,11 @@ func main() {
 	serverURL := os.Getenv("SERVER_URL")
 	if serverURL == "" {
 		serverURL = "http://localhost:8080"
+	}
+
+	// Ensure scheme exists (Render value 'host' provides just the domain)
+	if !strings.HasPrefix(serverURL, "http://") && !strings.HasPrefix(serverURL, "https://") {
+		serverURL = "https://" + serverURL
 	}
 
 	fmt.Printf("🚀 Log Agent starting...\n")
