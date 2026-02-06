@@ -20,7 +20,5 @@ services:
     plan: free
     envVars:
       - key: SERVER_URL
-        fromService:
-          type: web
-          name: logflow-api
-          property: host
+      - key: SERVER_URL
+        value: https://logflow-api.onrender.com
